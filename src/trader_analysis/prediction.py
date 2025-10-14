@@ -33,9 +33,10 @@ class HighPotentialPredictor:
     - SMOTE for class imbalance
     - Cross-validation
     - Feature importance analysis
+    - Support for both binary and multi-class classification
     """
     
-    def __init__(self, random_state: int = 42, use_smote: bool = True):
+    def __init__(self, random_state: int = 42, use_smote: bool = True, prediction_type: str = 'binary'):
         """
         Initialize HighPotentialPredictor.
         
@@ -45,13 +46,17 @@ class HighPotentialPredictor:
             Random state for reproducibility
         use_smote : bool
             Whether to use SMOTE for handling class imbalance
+        prediction_type : str
+            'binary' for high-potential prediction, 'persona' for persona type prediction
         """
         self.random_state = random_state
         self.use_smote = use_smote
+        self.prediction_type = prediction_type
         self.scaler = StandardScaler()
         self.models = {}
         self.feature_importances_ = None
         self.feature_names = None
+        self.persona_labels_ = None  # For multi-class persona prediction
         
     def create_target_labels(self, features_df: pd.DataFrame, 
                             top_percentile: float = 0.2,
@@ -96,6 +101,45 @@ class HighPotentialPredictor:
         labels = high_potential.astype(int)
         
         print(f"Created labels: {labels.sum()} high-potential traders ({labels.sum()/len(labels)*100:.1f}%)")
+        
+        return labels
+    
+    def create_persona_target_labels(self, df: pd.DataFrame, 
+                                     persona_column: str = 'true_archetype') -> pd.Series:
+        """
+        Create multi-class target labels for persona type prediction.
+        
+        Uses the true persona labels from the dataset (typically from sample data generation).
+        
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            Dataframe containing persona labels
+        persona_column : str
+            Name of the column containing true persona labels
+            
+        Returns:
+        --------
+        pd.Series
+            Persona labels encoded as integers
+        """
+        if persona_column not in df.columns:
+            raise ValueError(f"Column '{persona_column}' not found in dataframe. "
+                           f"Available columns: {df.columns.tolist()}")
+        
+        # Get unique personas and create label mapping
+        personas = df[persona_column].unique()
+        self.persona_labels_ = sorted(personas)
+        persona_to_int = {p: i for i, p in enumerate(self.persona_labels_)}
+        
+        # Convert to integer labels
+        labels = df[persona_column].map(persona_to_int)
+        
+        print(f"\nCreated persona labels for {len(self.persona_labels_)} classes:")
+        for i, persona in enumerate(self.persona_labels_):
+            count = (labels == i).sum()
+            pct = count / len(labels) * 100
+            print(f"  {i}: {persona} - {count} samples ({pct:.1f}%)")
         
         return labels
     
@@ -161,29 +205,64 @@ class HighPotentialPredictor:
         """
         print("\nTraining ensemble models...")
         
+        # Determine if multi-class based on unique labels
+        n_classes = len(np.unique(y_train))
+        is_multiclass = n_classes > 2
+        
+        if is_multiclass:
+            print(f"Multi-class classification with {n_classes} classes")
+        else:
+            print("Binary classification")
+        
         # XGBoost
-        self.models['xgboost'] = xgb.XGBClassifier(
-            n_estimators=200,
-            max_depth=6,
-            learning_rate=0.05,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=self.random_state,
-            eval_metric='logloss'
-        )
+        if is_multiclass:
+            self.models['xgboost'] = xgb.XGBClassifier(
+                n_estimators=200,
+                max_depth=6,
+                learning_rate=0.05,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=self.random_state,
+                eval_metric='mlogloss',
+                objective='multi:softprob',
+                num_class=n_classes
+            )
+        else:
+            self.models['xgboost'] = xgb.XGBClassifier(
+                n_estimators=200,
+                max_depth=6,
+                learning_rate=0.05,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=self.random_state,
+                eval_metric='logloss'
+            )
         self.models['xgboost'].fit(X_train, y_train)
         print("  ✓ XGBoost trained")
         
         # LightGBM
-        self.models['lightgbm'] = lgb.LGBMClassifier(
-            n_estimators=200,
-            max_depth=6,
-            learning_rate=0.05,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=self.random_state,
-            verbose=-1
-        )
+        if is_multiclass:
+            self.models['lightgbm'] = lgb.LGBMClassifier(
+                n_estimators=200,
+                max_depth=6,
+                learning_rate=0.05,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=self.random_state,
+                verbose=-1,
+                objective='multiclass',
+                num_class=n_classes
+            )
+        else:
+            self.models['lightgbm'] = lgb.LGBMClassifier(
+                n_estimators=200,
+                max_depth=6,
+                learning_rate=0.05,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=self.random_state,
+                verbose=-1
+            )
         self.models['lightgbm'].fit(X_train, y_train)
         print("  ✓ LightGBM trained")
         
@@ -210,10 +289,18 @@ class HighPotentialPredictor:
         print("  ✓ Gradient Boosting trained")
         
         # Logistic Regression (as baseline)
-        self.models['logistic_regression'] = LogisticRegression(
-            random_state=self.random_state,
-            max_iter=1000
-        )
+        if is_multiclass:
+            self.models['logistic_regression'] = LogisticRegression(
+                random_state=self.random_state,
+                max_iter=1000,
+                multi_class='multinomial',
+                solver='lbfgs'
+            )
+        else:
+            self.models['logistic_regression'] = LogisticRegression(
+                random_state=self.random_state,
+                max_iter=1000
+            )
         self.models['logistic_regression'].fit(X_train, y_train)
         print("  ✓ Logistic Regression trained")
         
@@ -233,7 +320,7 @@ class HighPotentialPredictor:
         Returns:
         --------
         np.ndarray
-            Predicted probabilities
+            Predicted probabilities (shape: [n_samples, n_classes])
         """
         if not self.models:
             raise ValueError("Models not trained yet. Call train_ensemble first.")
@@ -246,7 +333,10 @@ class HighPotentialPredictor:
         weights = {k: v/total_weight for k, v in weights.items()}
         
         # Get predictions from each model
-        predictions = np.zeros((X.shape[0], 2))
+        first_model = list(self.models.values())[0]
+        sample_proba = first_model.predict_proba(X[:1])
+        n_classes = sample_proba.shape[1]
+        predictions = np.zeros((X.shape[0], n_classes))
         
         for name, model in self.models.items():
             pred_proba = model.predict_proba(X)
@@ -263,7 +353,7 @@ class HighPotentialPredictor:
         X : np.ndarray
             Feature matrix
         threshold : float
-            Probability threshold for positive class
+            Probability threshold for positive class (only used for binary classification)
             
         Returns:
         --------
@@ -271,7 +361,13 @@ class HighPotentialPredictor:
             Predicted class labels
         """
         proba = self.predict_proba_ensemble(X)
-        return (proba[:, 1] >= threshold).astype(int)
+        
+        # For binary classification, use threshold
+        if proba.shape[1] == 2:
+            return (proba[:, 1] >= threshold).astype(int)
+        # For multi-class, use argmax
+        else:
+            return np.argmax(proba, axis=1)
     
     def evaluate(self, X_test: np.ndarray, y_test: np.ndarray) -> Dict:
         """
@@ -293,23 +389,51 @@ class HighPotentialPredictor:
         
         # Get predictions
         y_pred = self.predict(X_test)
-        y_proba = self.predict_proba_ensemble(X_test)[:, 1]
+        y_proba = self.predict_proba_ensemble(X_test)
+        
+        # Determine if binary or multi-class
+        n_classes = y_proba.shape[1]
+        is_binary = n_classes == 2
         
         # Calculate metrics
         metrics = {
-            'accuracy': accuracy_score(y_test, y_pred),
-            'f1_score': f1_score(y_test, y_pred),
-            'roc_auc': roc_auc_score(y_test, y_proba)
+            'accuracy': accuracy_score(y_test, y_pred)
         }
         
-        print(f"\nEnsemble Performance:")
-        print(f"  Accuracy: {metrics['accuracy']:.4f}")
-        print(f"  F1 Score: {metrics['f1_score']:.4f}")
-        print(f"  ROC AUC: {metrics['roc_auc']:.4f}")
-        
-        print(f"\nClassification Report:")
-        print(classification_report(y_test, y_pred, 
-                                   target_names=['Not High-Potential', 'High-Potential']))
+        if is_binary:
+            metrics['f1_score'] = f1_score(y_test, y_pred)
+            metrics['roc_auc'] = roc_auc_score(y_test, y_proba[:, 1])
+            
+            print(f"\nEnsemble Performance (Binary Classification):")
+            print(f"  Accuracy: {metrics['accuracy']:.4f}")
+            print(f"  F1 Score: {metrics['f1_score']:.4f}")
+            print(f"  ROC AUC: {metrics['roc_auc']:.4f}")
+            
+            print(f"\nClassification Report:")
+            print(classification_report(y_test, y_pred, 
+                                       target_names=['Not High-Potential', 'High-Potential']))
+        else:
+            # Multi-class metrics
+            metrics['f1_score_macro'] = f1_score(y_test, y_pred, average='macro')
+            metrics['f1_score_weighted'] = f1_score(y_test, y_pred, average='weighted')
+            
+            # Multi-class ROC AUC (one-vs-rest)
+            try:
+                metrics['roc_auc_ovr'] = roc_auc_score(y_test, y_proba, 
+                                                       multi_class='ovr', average='weighted')
+            except:
+                metrics['roc_auc_ovr'] = None
+            
+            print(f"\nEnsemble Performance (Multi-class Classification):")
+            print(f"  Accuracy: {metrics['accuracy']:.4f}")
+            print(f"  F1 Score (Macro): {metrics['f1_score_macro']:.4f}")
+            print(f"  F1 Score (Weighted): {metrics['f1_score_weighted']:.4f}")
+            if metrics['roc_auc_ovr'] is not None:
+                print(f"  ROC AUC (OvR): {metrics['roc_auc_ovr']:.4f}")
+            
+            print(f"\nClassification Report:")
+            target_names = self.persona_labels_ if self.persona_labels_ is not None else None
+            print(classification_report(y_test, y_pred, target_names=target_names))
         
         print(f"\nConfusion Matrix:")
         print(confusion_matrix(y_test, y_pred))
