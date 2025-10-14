@@ -33,17 +33,32 @@ python complete_analysis_pipeline.py
 This runs the entire pipeline and generates:
 - Feature engineering
 - Clustering analysis
-- Persona assignment
-- Predictive modeling
+- Persona assignment (rule-based)
+- **ML-based persona prediction** (NEW)
+- Binary high-potential trader prediction
 - Statistical validation
 - Visualizations and reports
 
 Results are saved to `outputs/` directory.
 
+### Step 2b: Run Persona Prediction Demo
+
+```bash
+python persona_prediction_demo.py
+```
+
+This demonstrates the new multi-class persona prediction capability:
+- Trains ML models to predict trader personas
+- Achieves 77.5% accuracy on 8-class classification
+- Shows feature importance for persona prediction
+- Compares ML predictions with rule-based assignment
+
 ### Step 3: View Results
 
 Check these key output files:
 - `outputs/high_potential_traders.csv` - Identified high-potential traders
+- **`outputs/persona_predictions.csv`** - ML-predicted personas with probabilities (NEW)
+- **`outputs/persona_prediction_feature_importance.csv`** - Features for persona prediction (NEW)
 - `outputs/top_20_traders.csv` - Top 20 ranked traders
 - `outputs/persona_statistics.csv` - Performance by persona
 - `outputs/summary_dashboard.png` - Visual summary
