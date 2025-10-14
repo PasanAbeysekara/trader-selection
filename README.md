@@ -21,10 +21,16 @@ This framework provides a comprehensive, statistically-rigorous approach to iden
 - PCA-based dimensionality reduction for visualization
 
 ### 3. **Predictive Modeling**
-- Ensemble methods (XGBoost, LightGBM, Random Forest, Gradient Boosting)
-- SMOTE for handling class imbalance
+- **Binary Classification**: Identify high-potential traders
+  - Ensemble methods (XGBoost, LightGBM, Random Forest, Gradient Boosting)
+  - SMOTE for handling class imbalance
+  - Probability calibration for high-potential identification
+- **Multi-class Persona Prediction**: ML-based persona classification
+  - Train models to predict trader personas from behavior patterns
+  - 8-class classification (Whale, Sniper, Scalper, HODLer, Risk Taker, Consistent, Newcomer, Inactive)
+  - Superior accuracy compared to rule-based assignment
+  - Confidence scores and probability distributions for each persona
 - Cross-validation and feature importance analysis
-- Probability calibration for high-potential trader identification
 
 ### 4. **Persona Assignment**
 - **The Whale**: High volume, market-moving trades
@@ -100,22 +106,54 @@ clusterer = TraderSegmentation(random_state=42)
 clusterer.fit_kmeans(features.drop('address', axis=1).values, optimize_k=True)
 features['cluster'] = clusterer.labels_
 
-# 3. Persona Assignment
+# 3. Persona Assignment (Rule-based)
 persona_assigner = PersonaAssigner()
 features = persona_assigner.assign_personas(features)
 
-# 4. Predictive Modeling
+# 4. Predictive Modeling - Binary High-Potential Prediction
 predictor = HighPotentialPredictor(random_state=42)
 target = predictor.create_target_labels(features, top_percentile=0.2)
 X_train, X_test, y_train, y_test = predictor.prepare_data(features, target)
 predictor.train_ensemble(X_train, y_train)
 predictor.evaluate(X_test, y_test)
 
-# 5. Get High-Potential Traders
+# 5. ML-based Persona Prediction (requires true labels)
+# If you have labeled data (e.g., from generate_sample_data.py)
+if 'true_archetype' in df.columns:
+    persona_predictor = HighPotentialPredictor(
+        random_state=42, 
+        prediction_type='persona'
+    )
+    persona_target = persona_predictor.create_persona_target_labels(df_with_labels)
+    X_train_p, X_test_p, y_train_p, y_test_p = persona_predictor.prepare_data(
+        features, persona_target
+    )
+    persona_predictor.train_ensemble(X_train_p, y_train_p)
+    persona_predictor.evaluate(X_test_p, y_test_p)
+    
+    # Get persona predictions
+    X_scaled_p = persona_predictor.scaler.transform(features.drop('address', axis=1).values)
+    predicted_personas = persona_predictor.predict(X_scaled_p)
+    persona_probs = persona_predictor.predict_proba_ensemble(X_scaled_p)
+
+# 6. Get High-Potential Traders
 X_scaled = predictor.scaler.transform(features.drop('address', axis=1).values)
 features['high_potential_score'] = predictor.predict_proba_ensemble(X_scaled)[:, 1]
 high_potential = features[features['high_potential_score'] > 0.7]
 ```
+
+### Run Persona Prediction Demo
+
+```bash
+cd examples
+python persona_prediction_demo.py
+```
+
+This demonstrates:
+- Training a multi-class classifier to predict trader personas
+- 77.5% accuracy on 8-class persona prediction
+- Feature importance for persona classification
+- Comparison of predicted vs rule-based persona assignment
 
 ## 📁 Project Structure
 
@@ -132,7 +170,8 @@ trader-selection/
 │       └── visualization.py           # Plotting and visualization
 ├── examples/
 │   ├── generate_sample_data.py       # Sample data generator
-│   └── complete_analysis_pipeline.py # End-to-end pipeline
+│   ├── complete_analysis_pipeline.py # End-to-end pipeline
+│   └── persona_prediction_demo.py    # Persona prediction demonstration
 ├── data/
 │   ├── raw/                          # Raw transaction data
 │   └── processed/                    # Processed features

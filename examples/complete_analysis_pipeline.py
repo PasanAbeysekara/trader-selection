@@ -135,10 +135,125 @@ def run_complete_analysis(data_path: str, output_dir: str = '../outputs'):
             print(traders_df[['address', 'weighted_pnl', 'roi', 'win_rate']].to_string())
     
     # =========================================================================
-    # STEP 5: Predictive Modeling
+    # STEP 5: Predictive Modeling - Persona Type Prediction
     # =========================================================================
     print("\n" + "="*70)
-    print("STEP 5: Predictive Modeling for High-Potential Traders")
+    print("STEP 5A: Predictive Modeling - Persona Type Prediction")
+    print("="*70)
+    
+    # Check if we have true archetype labels (from sample data)
+    if 'true_archetype' in df.columns:
+        print("\nDetected true archetype labels in data. Training persona predictor...")
+        
+        # Create persona-based features with true labels
+        df_with_labels = df.copy()
+        features_with_labels = features.merge(
+            df_with_labels[['address', 'true_archetype']].drop_duplicates('address'),
+            on='address',
+            how='left'
+        )
+        
+        # Only use samples with labels
+        features_with_labels = features_with_labels[features_with_labels['true_archetype'].notna()]
+        
+        if len(features_with_labels) > 0:
+            persona_predictor = HighPotentialPredictor(random_state=42, use_smote=True, prediction_type='persona')
+            
+            # Create persona target labels
+            persona_target = persona_predictor.create_persona_target_labels(
+                features_with_labels,
+                persona_column='true_archetype'
+            )
+            
+            # Prepare data (exclude persona columns and true labels)
+            features_for_persona_pred = features_with_labels.drop(
+                ['persona', 'persona_confidence', 'persona_description', 'cluster', 'true_archetype'], 
+                axis=1, errors='ignore'
+            )
+            
+            X_train_p, X_test_p, y_train_p, y_test_p = persona_predictor.prepare_data(
+                features_for_persona_pred,
+                persona_target,
+                test_size=0.2
+            )
+            
+            # Train ensemble for persona prediction
+            persona_predictor.train_ensemble(X_train_p, y_train_p)
+            
+            # Evaluate
+            persona_metrics = persona_predictor.evaluate(X_test_p, y_test_p)
+            
+            # Feature importance for persona prediction
+            persona_importance_df = persona_predictor.get_feature_importance()
+            print("\nTop 10 Most Important Features for Persona Prediction:")
+            print(persona_importance_df.head(10).to_string())
+            
+            persona_importance_df.to_csv(f"{output_dir}/persona_prediction_feature_importance.csv", index=False)
+            visualizer.plot_feature_importance(
+                persona_importance_df,
+                top_n=15,
+                save_path=f"{output_dir}/persona_prediction_feature_importance.png"
+            )
+            
+            # Predict personas on all data
+            features_for_all_pred = features.drop(
+                ['persona', 'persona_confidence', 'persona_description', 'cluster'], 
+                axis=1, errors='ignore'
+            )
+            X_all_p = features_for_all_pred[[col for col in features_for_all_pred.columns if col != 'address']].values
+            X_all_p_scaled = persona_predictor.scaler.transform(X_all_p)
+            
+            # Get predictions
+            predicted_persona_idx = persona_predictor.predict(X_all_p_scaled)
+            predicted_persona_proba = persona_predictor.predict_proba_ensemble(X_all_p_scaled)
+            
+            # Map back to persona names
+            predicted_personas = [persona_predictor.persona_labels_[idx] for idx in predicted_persona_idx]
+            predicted_persona_confidence = np.max(predicted_persona_proba, axis=1)
+            
+            features['predicted_persona'] = predicted_personas
+            features['predicted_persona_confidence'] = predicted_persona_confidence
+            
+            # Get probability for each persona class
+            for i, persona_name in enumerate(persona_predictor.persona_labels_):
+                features[f'persona_prob_{persona_name}'] = predicted_persona_proba[:, i]
+            
+            print(f"\nPersona Prediction Summary:")
+            pred_persona_counts = pd.Series(predicted_personas).value_counts()
+            for persona, count in pred_persona_counts.items():
+                pct = count / len(predicted_personas) * 100
+                print(f"  {persona}: {count} traders ({pct:.1f}%)")
+            
+            # Save predictions
+            persona_predictions = features[['address', 'predicted_persona', 'predicted_persona_confidence'] + 
+                                          [col for col in features.columns if col.startswith('persona_prob_')]]
+            persona_predictions.to_csv(f"{output_dir}/persona_predictions.csv", index=False)
+            print(f"\nPersona predictions saved to: {output_dir}/persona_predictions.csv")
+            
+            # Compare predicted vs rule-based personas
+            if 'persona' in features.columns:
+                comparison = pd.DataFrame({
+                    'address': features['address'],
+                    'rule_based_persona': features['persona'],
+                    'predicted_persona': features['predicted_persona'],
+                    'rule_based_confidence': features['persona_confidence'],
+                    'predicted_confidence': features['predicted_persona_confidence']
+                })
+                
+                # Calculate agreement
+                agreement = (comparison['rule_based_persona'] == comparison['predicted_persona']).sum()
+                agreement_pct = agreement / len(comparison) * 100
+                print(f"\nRule-based vs ML Prediction Agreement: {agreement_pct:.1f}%")
+                
+                comparison.to_csv(f"{output_dir}/persona_comparison.csv", index=False)
+    else:
+        print("\nNo true archetype labels found in data. Skipping persona prediction.")
+    
+    # =========================================================================
+    # STEP 5B: Binary High-Potential Prediction (Original Method)
+    # =========================================================================
+    print("\n" + "="*70)
+    print("STEP 5B: Predictive Modeling for High-Potential Traders")
     print("="*70)
     
     predictor = HighPotentialPredictor(random_state=42, use_smote=True)
@@ -151,7 +266,10 @@ def run_complete_analysis(data_path: str, output_dir: str = '../outputs'):
     )
     
     # Prepare data (exclude persona columns)
-    features_for_prediction = features.drop(['persona', 'persona_confidence', 'persona_description', 'cluster'], axis=1, errors='ignore')
+    cols_to_drop = ['persona', 'persona_confidence', 'persona_description', 'cluster', 
+                    'predicted_persona', 'predicted_persona_confidence', 'true_archetype']
+    cols_to_drop += [col for col in features.columns if col.startswith('persona_prob_')]
+    features_for_prediction = features.drop(cols_to_drop, axis=1, errors='ignore')
     X_train, X_test, y_train, y_test = predictor.prepare_data(
         features_for_prediction,
         target,
@@ -177,7 +295,10 @@ def run_complete_analysis(data_path: str, output_dir: str = '../outputs'):
     )
     
     # Predict on all data
-    features_for_prediction = features.drop(['persona', 'persona_confidence', 'persona_description', 'cluster'], axis=1, errors='ignore')
+    cols_to_drop = ['persona', 'persona_confidence', 'persona_description', 'cluster',
+                    'predicted_persona', 'predicted_persona_confidence', 'true_archetype']
+    cols_to_drop += [col for col in features.columns if col.startswith('persona_prob_')]
+    features_for_prediction = features.drop(cols_to_drop, axis=1, errors='ignore')
     X_all = features_for_prediction[[col for col in features_for_prediction.columns if col != 'address']].values
     X_all_scaled = predictor.scaler.transform(X_all)
     high_potential_proba = predictor.predict_proba_ensemble(X_all_scaled)[:, 1]
