@@ -266,7 +266,10 @@ def run_complete_analysis(data_path: str, output_dir: str = '../outputs'):
     )
     
     # Prepare data (exclude persona columns)
-    features_for_prediction = features.drop(['persona', 'persona_confidence', 'persona_description', 'cluster'], axis=1, errors='ignore')
+    cols_to_drop = ['persona', 'persona_confidence', 'persona_description', 'cluster', 
+                    'predicted_persona', 'predicted_persona_confidence', 'true_archetype']
+    cols_to_drop += [col for col in features.columns if col.startswith('persona_prob_')]
+    features_for_prediction = features.drop(cols_to_drop, axis=1, errors='ignore')
     X_train, X_test, y_train, y_test = predictor.prepare_data(
         features_for_prediction,
         target,
@@ -292,7 +295,10 @@ def run_complete_analysis(data_path: str, output_dir: str = '../outputs'):
     )
     
     # Predict on all data
-    features_for_prediction = features.drop(['persona', 'persona_confidence', 'persona_description', 'cluster'], axis=1, errors='ignore')
+    cols_to_drop = ['persona', 'persona_confidence', 'persona_description', 'cluster',
+                    'predicted_persona', 'predicted_persona_confidence', 'true_archetype']
+    cols_to_drop += [col for col in features.columns if col.startswith('persona_prob_')]
+    features_for_prediction = features.drop(cols_to_drop, axis=1, errors='ignore')
     X_all = features_for_prediction[[col for col in features_for_prediction.columns if col != 'address']].values
     X_all_scaled = predictor.scaler.transform(X_all)
     high_potential_proba = predictor.predict_proba_ensemble(X_all_scaled)[:, 1]
