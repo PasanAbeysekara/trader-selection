@@ -150,9 +150,10 @@ def run_complete_analysis(data_path: str, output_dir: str = '../outputs'):
         min_trades=10
     )
     
-    # Prepare data
+    # Prepare data (exclude persona columns)
+    features_for_prediction = features.drop(['persona', 'persona_confidence', 'persona_description', 'cluster'], axis=1, errors='ignore')
     X_train, X_test, y_train, y_test = predictor.prepare_data(
-        features,
+        features_for_prediction,
         target,
         test_size=0.2
     )
@@ -176,7 +177,9 @@ def run_complete_analysis(data_path: str, output_dir: str = '../outputs'):
     )
     
     # Predict on all data
-    X_all_scaled = predictor.scaler.transform(features[feature_cols].values)
+    features_for_prediction = features.drop(['persona', 'persona_confidence', 'persona_description', 'cluster'], axis=1, errors='ignore')
+    X_all = features_for_prediction[[col for col in features_for_prediction.columns if col != 'address']].values
+    X_all_scaled = predictor.scaler.transform(X_all)
     high_potential_proba = predictor.predict_proba_ensemble(X_all_scaled)[:, 1]
     features['high_potential_score'] = high_potential_proba
     features['high_potential'] = predictor.predict(X_all_scaled)
