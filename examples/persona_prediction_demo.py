@@ -90,14 +90,27 @@ def run_persona_prediction_demo(data_path: str = '../data/raw/sample_transaction
     print("\n6. Example predictions:")
     print("-" * 70)
     
-    # Get predictions and probabilities
-    predictions = predictor.predict(X_test)
-    probabilities = predictor.predict_proba_ensemble(X_test)
+    # Get predictions and probabilities for first 5 examples
+    num_examples = min(5, len(X_test))
+    X_sample = X_test[:num_examples]
+    y_sample = y_test[:num_examples]
     
-    # Show first 5 examples
-    for i in range(min(5, len(predictions))):
-        true_label = y_test[i]
+    predictions = predictor.predict(X_sample)
+    probabilities = predictor.predict_proba_ensemble(X_sample)
+    
+    # Show examples
+    for i in range(num_examples):
+        true_label = y_sample[i]
         pred_label = predictions[i]
+        
+        # Validate indices are within range
+        if true_label < 0 or true_label >= len(predictor.persona_labels_):
+            print(f"? Invalid true label index: {true_label}")
+            continue
+        if pred_label < 0 or pred_label >= len(predictor.persona_labels_):
+            print(f"? Invalid predicted label index: {pred_label}")
+            continue
+            
         true_persona = predictor.persona_labels_[true_label]
         pred_persona = predictor.persona_labels_[pred_label]
         confidence = probabilities[i, pred_label]

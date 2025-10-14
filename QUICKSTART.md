@@ -49,7 +49,7 @@ python persona_prediction_demo.py
 
 This demonstrates the new multi-class persona prediction capability:
 - Trains ML models to predict trader personas
-- Achieves 77.5% accuracy on 8-class classification
+- Achieves strong accuracy on 8-class classification
 - Shows feature importance for persona prediction
 - Compares ML predictions with rule-based assignment
 
