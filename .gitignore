@@ -28,7 +28,7 @@ wheels/
 *.ipynb_checkpoints
 
 # Data files
-*.csv
+# *.csv
 *.parquet
 *.pkl
 *.pickle
@@ -44,7 +44,7 @@ models/*.joblib
 
 # Results
 results/
-outputs/
+# outputs/
 
 # IDE
 .vscode/

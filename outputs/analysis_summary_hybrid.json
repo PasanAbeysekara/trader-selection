@@ -1,0 +1,10 @@
+{
+  "total_traders_analyzed": 797,
+  "classified_traders": 279,
+  "unclassified_traders": 518,
+  "high_confidence_count": 17,
+  "personas_discovered": 7,
+  "avg_copy_trading_score": 0.424482620462067,
+  "top_trader_address": "12ezPHMdedFwM94YefhRJ9RLhZcsDmX3gJsMKCWt6K9e",
+  "top_trader_score": 0.8141509312500002
+}

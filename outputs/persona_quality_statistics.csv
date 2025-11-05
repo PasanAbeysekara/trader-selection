@@ -1,0 +1,8 @@
+persona,copy_trading_score_mean,copy_trading_score_median,copy_trading_score_std,copy_trading_score_min,copy_trading_score_max,quality_score_mean,quality_score_median,profitability_score_mean,risk_adjusted_score_mean,consistency_score_mean,total_pnl_mean,win_rate_mean,trader_count
+Consistent Performer,0.5,0.487,0.055,0.435,0.593,0.387,0.367,0.389,0.419,0.897,46504.2,61.288,6
+Developing Trader,0.396,0.396,0.061,0.272,0.496,0.389,0.409,0.375,0.344,0.519,27696.933,68.6,45
+Elite Sniper,0.531,0.525,0.062,0.405,0.648,0.546,0.521,0.518,0.393,0.755,32209.967,91.532,21
+Momentum Trader,0.444,0.435,0.042,0.337,0.523,0.374,0.359,0.412,0.284,0.784,33349.254,48.145,24
+Risk-Taker,0.361,0.339,0.121,0.169,0.691,0.443,0.414,0.406,0.133,0.57,389270.09,21.251,111
+Scalper,0.496,0.478,0.054,0.436,0.654,0.414,0.386,0.375,0.351,0.997,61940.848,57.86,50
+Whale,0.498,0.477,0.127,0.343,0.814,0.472,0.467,0.534,0.244,0.819,651287.273,45.708,22
